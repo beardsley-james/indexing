@@ -24,6 +24,8 @@ var cardPoolIndex = 0;
 
 var packResults = [];
 
+var maxCardCost = 0;
+
 $.ajax({
 	type: "GET",
 	url: "https://netrunnerdb.com/api/2.0/public/factions",
@@ -47,6 +49,9 @@ $.ajax({
 	dataType: "json",
 	success: function(data){
 		types = data.data;
+		types.sort(function(a,b){
+			return a.position - b.position
+		})
 		loadStatus.types = true;
 		for (i = 0; i < types.length; i++){
 			if (!types[i].is_subtype){
@@ -103,6 +108,11 @@ function checkStatus(){
 		}
 	}
 	cards = cards.filter(filterCards);
+	cards.forEach(function(card){
+		if (card.cost > maxCardCost){
+			maxCardCost = card.cost
+		}
+	})
 	renderList()
 }
 
@@ -110,16 +120,70 @@ var filterCards = function(card){
 	return (pack_codes.indexOf(card.pack_code) != -1)
 }
 
-var sampleCriteria = ["alphabet", "faction", "type"]
+var sampleCriteria = ["faction", "alphabet"]
 
 var renderList = function(){
-	cards.sort(sortAlphabeticByTitle);
-	cards = groupByFaction(cards);
-	cards = groupByType(cards);
+	sampleCriteria.forEach(sortSwitch);
 	cards = steamrollArray(cards);
-	cards.forEach(function(card){
-		document.write(card.title + "</br>")
-	})
+	numberCards(cards, 9, "faction_code");
+	/* cards.forEach(function(card){
+		document.write(card.title + ", " + card.faction_code + " " + card.type_code + ": Page " + card.pageNumber + ", slot " + card.pageLocation + "</br>")
+	}) */
+}
+
+var sortSwitch = function(criteria){
+	switch (criteria) {
+		case "alphabet":
+			cards = groupAlphabetize(cards);
+			break;
+		case "faction":
+			cards = groupByFaction(cards);
+			break;
+		case "type":
+			cards = groupByType(cards);
+			break;
+		case "pack":
+			cards = groupByPack(cards);
+		case "cost":
+			cards = groupSortByCost(cards);
+			break;
+	}
+}
+
+function numberCards(cards, cardsPerPage, pageBreak){
+	var pageNumber = 1;
+	var pageLocation = 1;
+	for (i = 0; i < cards.length; i++){
+		cards[i].pageLocation = pageLocation;
+		cards[i].pageNumber = pageNumber;
+		pageLocation++;
+		if (cards[i+1]){
+			if (cards[i][pageBreak] != cards[i+1][pageBreak]) {
+				pageNumber++;
+				pageLocation = 1
+			} else if (pageLocation > cardsPerPage) {
+				pageNumber++;
+				pageLocation = 1
+			}
+		}
+	}
+}
+
+var groupByPack = function(set){
+	var returnArray = [];
+	if (Array.isArray(set[0])){
+		set.forEach(function(subset){
+			returnArray.push(groupByPack(subset))
+		})
+	} else {
+		pack_codes.forEach(function(){
+			returnArray.push([])
+		})
+		set.forEach(function(item){
+			returnArray[pack_codes.indexOf(item.pack_code)].push(item)
+		})
+	}
+	return returnArray
 }
 
 var groupByFaction = function(set){
@@ -156,6 +220,38 @@ var groupByType = function(set){
 	return returnArray
 }
 
+var groupAlphabetize = function(set){
+	var returnSet = set;
+	if (Array.isArray(set[0])){
+		returnSet.forEach(function(subset){
+			groupAlphabetize(subset)
+		})
+	} else {
+		returnSet.sort(sortAlphabeticByTitle)
+	}
+	return returnSet
+}
+
+var groupSortByCost = function(set){
+	var returnArray = [];
+	if (Array.isArray(set[0])){
+		set.forEach(function(subset){
+			returnArray.push(groupSortByCost(subset))
+		})
+	} else {
+		for (i = 0; i <= maxCardCost + 1; i++){
+			returnArray.push([])
+		}
+		set.forEach(function(item){
+			if (item.cost == undefined){
+				returnArray[0].push(item)
+			} else {
+				returnArray[item.cost + 1].push(item)
+			}
+		})
+	}
+	return returnArray
+}
 
 var sortAlphabeticByTitle = function(a, b){
 	var nameA = a.title.toUpperCase();
@@ -167,34 +263,6 @@ var sortAlphabeticByTitle = function(a, b){
 		return 1;
 	}
 	return 0;
-}
-
-var sortByFaction = function(a, b){
-	var factionA = a.faction_code;
-	var factionB = b.faction_code;
-
-	if (faction_codes.indexOf(factionA) < faction_codes.indexOf(factionB)){
-		return -1
-	}
-	
-	if (faction_codes.indexOf(factionA) > faction_codes.indexOf(factionB)){
-		return 1
-	}
-	return 0
-}
-
-var sortByType = function(a, b){
-	var typeA = a.type_code;
-	var typeB = b.type_code;
-
-	if (type_codes.indexOf(typeA) < type_codes.indexOf(typeB)){
-		return -1
-	}
-	
-	if (type_codes.indexOf(typeA) > type_codes.indexOf(typeB)){
-		return 1
-	}
-	return 0
 }
 
 function steamrollArray(arr) {
